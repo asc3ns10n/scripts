@@ -19,6 +19,9 @@ def main():
     for file in glob.glob(args.directory+"**/*.ass"):
         # Get base name
         base_name = os.path.splitext(file)[0]
+        # Skip processing existing signs files
+        if base_name.endswith("_signs"):
+            continue
         # Parse sub file
         with open(os.path.join(args.directory, file), encoding='utf_8_sig') as subs:
             doc = ass.parse(subs)
