@@ -36,22 +36,29 @@ def main():
     )
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument(
-        "--remove",
+        "--remove-lines",
         action="store_true",
         default=True,
         help="Remove lines with the specified style names (default option)",
     )
     group.add_argument(
-        "--keep",
+        "--keep-lines",
         action="store_true",
         default=False,
         help="Keep lines with the specified style names and remove the rest",
+    )
+    parser.add_argument(
+        "--remove-comments",
+        action="store_true",
+        default=False,
+        help="""
+    Remove comments that use matching styles""",
     )
     args = parser.parse_args()
 
     styles = args.styles.split(",")
 
-    for file in glob.glob(args.directory + "/*.ass"):
+    for file in glob.glob(glob.escape(args.directory) + "/*.ass"):
         # Get base name
         base_name = os.path.splitext(file)[0]
         # Skip processing existing files created by the script
@@ -65,14 +72,22 @@ def main():
         # Create new events list and add items
         new_events = []
         for event in doc.events:
-            if args.keep:
+            if args.keep_lines:
                 # Only include events with specified styles
                 if event.style in styles:
                     new_events.append(event)
+                # Include comments if arg is false
+                elif event.TYPE == "Comment":
+                    if not args.remove_comments:
+                        new_events.append(event)
             else:
                 # Do not include events with specified styles
                 if event.style not in styles:
                     new_events.append(event)
+                # Include comments if arg is false
+                elif event.TYPE == "Comment":
+                    if not args.remove_comments:
+                        new_events.append(event)
         # Overwrite events with the new list
         doc.events = new_events
         # Create new sub file

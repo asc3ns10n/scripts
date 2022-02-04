@@ -8,7 +8,8 @@ Parses .ass files in a directory and removes lines that use specific styles. You
 
 ```
 $ removestyles --help
-usage: removestyles [-h] --dir <directory> --styles <csv> [--suffix <suffix>] [--remove | --keep]
+usage: removestyles.py [-h] --dir <directory> --styles <csv> [--suffix <suffix>] [--remove-lines | --keep-lines]
+                       [--remove-comments]
 
 Remove lines from .ass files that use specific styles
 
@@ -17,8 +18,9 @@ optional arguments:
   --dir <directory>  Directory containing .ass files
   --styles <csv>     Comma separated list of style names
   --suffix <suffix>  Text that will be appended to the new file name
-  --remove           Remove lines with the specified style names (default option)
-  --keep             Keep lines with the specified style names and remove the rest
+  --remove-lines     Remove lines with the specified style names (default option)
+  --keep-lines       Keep lines with the specified style names and remove the rest
+  --remove-comments  Remove comments that use matching styles 
 ```
 
 ### Installation
@@ -36,7 +38,7 @@ removestyles --dir "D:\Projects\Show\Subs" --styles "Main,Italics" --suffix "sig
 
 Create file that only contains a specific style
 ```
-removestyles --dir "D:\Projects\Show\Subs" --styles "Signs" --keep
+removestyles --dir "D:\Projects\Show\Subs" --styles "Signs" --keep-lines
 ```
 
 ## Sync Audio
