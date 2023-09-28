@@ -1,7 +1,7 @@
 import argparse
-import glob
 import os
 import sys
+from pathlib import Path
 
 import ass
 
@@ -54,49 +54,44 @@ def main():
         help="""
     Remove comments that use matching styles""",
     )
-    args = parser.parse_args()
 
+    args = parser.parse_args()
+    directory_path = Path(args.directory)
     styles = args.styles.split(",")
 
-    for file in glob.glob(glob.escape(args.directory) + "/*.ass"):
-        # Get base name
-        base_name = os.path.splitext(file)[0]
+    # Check if directory exists
+    if not directory_path.exists() or not directory_path.is_dir():
+        print(f"Error: Directory '{directory_path}' does not exist or is not a directory.", file=sys.stderr)
+        return 1
+
+    for file_path in directory_path.glob("*.ass"):
+        base_name = file_path.stem
+
         # Skip processing existing files created by the script
         if base_name.endswith(args.suffix):
             continue
+
         # Parse sub file
-        with open(
-            os.path.join(args.directory, file), encoding="utf_8_sig"
-        ) as orig_subs:
+        with file_path.open(encoding="utf_8_sig") as orig_subs:
             doc = ass.parse(orig_subs)
-        # Create new events list and add items
+            
+        # Filtering events based on user input
         new_events = []
         for event in doc.events:
-            if args.keep_lines:
-                # Only include events with specified styles
-                if event.style in styles:
-                    new_events.append(event)
-                # Include comments if arg is false
-                elif event.TYPE == "Comment":
-                    if not args.remove_comments:
-                        new_events.append(event)
-            else:
-                # Do not include events with specified styles
-                if event.style not in styles:
-                    new_events.append(event)
-                # Include comments if arg is false
-                elif event.TYPE == "Comment":
-                    if not args.remove_comments:
-                        new_events.append(event)
-        # Overwrite events with the new list
+            if args.keep_lines and event.style in styles:
+                new_events.append(event)
+            elif not args.keep_lines and event.style not in styles:
+                new_events.append(event)
+            elif event.TYPE == "Comment" and not args.remove_comments:
+                new_events.append(event)
+        
         doc.events = new_events
-        # Create new sub file
-        new_file = os.path.join(
-            args.directory, "{}_{}.ass".format(base_name, args.suffix)
-        )
-        with open(new_file, "w", encoding="utf_8_sig") as new_subs:
+
+        new_file_path = directory_path / f"{base_name}_{args.suffix}.ass"
+        with new_file_path.open("w", encoding="utf_8_sig") as new_subs:
             doc.dump_file(new_subs)
-        print(f"Created file {new_file}")
+
+        print(f"Created file {new_file_path}")
 
 
 if __name__ == "__main__":

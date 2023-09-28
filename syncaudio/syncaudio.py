@@ -12,65 +12,98 @@ from pymkv import MKVFile, MKVTrack
 
 
 def find_offset(file1, file2, trim, sample_rate):
-    # Convert audio files to WAV and trim
+    """
+    Find the offset between two audio files using cross-correlation.
+    
+    Parameters:
+    - file1, file2: Paths to the two audio files to be compared.
+    - trim: Duration for trimming the audio.
+    - sample_rate: Sample rate to be used for the audio files.
+    
+    Returns:
+    - delay: Offset in milliseconds between the two audio files.
+    """
+    
     tmp1 = convert_and_trim(file1, sample_rate, trim)
     tmp2 = convert_and_trim(file2, sample_rate, trim)
-    # Read WAV files
+    
     aud1 = wavfile.read(tmp1, mmap=True)[1] / (2.0 ** 15)
     aud2 = wavfile.read(tmp2, mmap=True)[1] / (2.0 ** 15)
-    # Calculate offset using cross correlation
+    
     n = len(aud1)
-    corr = signal.correlate(aud1, aud2, mode="same") / np.sqrt(
-        signal.correlate(aud1, aud2, mode="same")[int(n / 2)]
-        * signal.correlate(aud1, aud2, mode="same")[int(n / 2)]
-    )
+    correlation = signal.correlate(aud1, aud2, mode="same")
+    corr_normalization = correlation[int(n / 2)] * correlation[int(n / 2)]
+    
+    corr = correlation / np.sqrt(corr_normalization)
+    
     delay_arr = np.linspace(-0.5 * n / sample_rate, 0.5 * n / sample_rate, n)
     delay = int(delay_arr[np.argmax(corr)] * 1000)
-    # Remove temp files
+
     os.remove(tmp1)
     os.remove(tmp2)
+
     return delay
 
 
-def convert_and_trim(afile, sample_rate, trim):
-    tmp = tempfile.NamedTemporaryFile(mode="r+b", prefix="offset_", suffix=".wav")
-    tmp_name = tmp.name
-    tmp.close()
-    psox = Popen(
-        [
+def convert_and_trim(audio_file, sample_rate, trim_duration):
+    """
+    Convert an audio file to a specified sample rate and trim its duration.
+
+    Parameters:
+    - audio_file: Path to the input audio file.
+    - sample_rate: Desired sample rate for the output.
+    - trim_duration: Duration to which the audio should be trimmed.
+
+    Returns:
+    - tmp_name: Path to the converted and trimmed temporary WAV file.
+    """
+    
+    with tempfile.NamedTemporaryFile(mode="r+b", prefix="offset_", suffix=".wav", delete=False) as tmp:
+        tmp_name = tmp.name
+
+        ffmpeg_cmd = [
             "ffmpeg",
-            "-loglevel",
-            "panic",
-            "-i",
-            afile,
-            "-ac",
-            "1",
-            "-ar",
-            str(sample_rate),
-            "-ss",
-            "0",
-            "-t",
-            str(trim),
-            "-acodec",
-            "pcm_s16le",
-            tmp_name,
-        ],
-        stderr=PIPE,
-    )
-    psox.communicate()
-    if psox.returncode != 0:
-        raise Exception("FFMpeg failed")
+            "-loglevel", "panic",
+            "-i", audio_file,
+            "-ac", "1",
+            "-ar", str(sample_rate),
+            "-ss", "0",
+            "-t", str(trim_duration),
+            "-acodec", "pcm_s16le",
+            tmp_name
+        ]
+
+        process = Popen(ffmpeg_cmd, stderr=PIPE)
+        _, stderr = process.communicate()
+
+        if process.returncode != 0:
+            raise Exception(f"FFMpeg failed with error: {stderr.decode('utf-8')}")
+
     return tmp_name
 
 
-def mux_file(file, offset):
-    # Set output file name
-    basename = os.path.splitext(file)[0]
-    output = os.path.join(basename + " [{}ms].mka").format(str(offset))
-    # Create mka file
-    track = MKVTrack(file)
+def mux_file(file_path, offset):
+    """
+    Create a Matroska audio (.mka) file with a specified offset.
+
+    Parameters:
+    - file_path: Path to the input audio file.
+    - offset: Offset value in milliseconds.
+
+    Side Effect:
+    - Produces an .mka file with the specified offset.
+    """
+    
+    if not os.path.exists(file_path):
+        raise ValueError(f"The file '{file_path}' does not exist.")
+    
+    basename = os.path.splitext(file_path)[0]
+    output = f"{basename} [{offset}ms].mka"
+
+    track = MKVTrack(file_path)
     track.default_track = True
     track.sync = offset
+
     mka = MKVFile()
     mka.add_track(track)
     mka.mux(output)
@@ -122,17 +155,21 @@ def main():
     )
     args = parser.parse_args()
 
-    # Get the offset
-    offset = find_offset(
-        args.source_file, args.dest_file, args.trim, args.sample_rate
-    )
-    print("Offset is " + str(offset) + "ms")
+    if not os.path.exists(args.source_file):
+        print(f"Error: Source file '{args.source_file}' does not exist.", file=sys.stderr)
+        return 1
+    if not os.path.exists(args.dest_file):
+        print(f"Error: Destination file '{args.dest_file}' does not exist.", file=sys.stderr)
+        return 1
 
-    # Mux file with delay
-    if args.apply_to:
-        mux_file(args.apply_to, offset)
-    else:
-        mux_file(args.dest_file, offset)
+    try:
+        offset = find_offset(args.source_file, args.dest_file, args.trim, args.sample_rate)
+        print(f"Offset is {offset}ms")
+        mux_file(args.apply_to if args.apply_to else args.dest_file, offset)
+        return 0  # Successful execution
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1  # Indicate an error
 
 
 if __name__ == "__main__":
