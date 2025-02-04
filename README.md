@@ -63,6 +63,7 @@ optional arguments:
                         File to apply offset to
   --trim <seconds>      Only uses first n seconds of audio files [900]
   --sample-rate <rate>  Target sample rate during downsampling [8000]
+  --display-only        Only displays the offset and does not apply it
 ```
 
 ### Installation
